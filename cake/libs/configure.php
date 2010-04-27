@@ -333,13 +333,10 @@ class Configure extends Object {
 		}
 
 		if ($write === true) {
-			if (!class_exists('File')) {
-				require LIBS . 'file.php';
-			}
-			$fileClass = new File($file);
+			$fileClass = new SplFileObject($file, 'a');
 
-			if ($fileClass->writable()) {
-				$fileClass->append($content);
+			if ($fileClass->isWritable()) {
+				$fileClass->fwrite($content);
 			}
 		}
 	}
@@ -980,20 +977,27 @@ class App extends Object {
 				}
 				continue;
 			}
+			
+			if (!is_dir($path)) {
+				return null;
+			}
 
 			if (!isset($this->__paths[$path])) {
-				if (!class_exists('Folder')) {
-					require LIBS . 'folder.php';
-				}
-				$Folder =& new Folder();
+				$iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path));
+				$directories = new RegexIterator($iterator, '/^[^\.].+$/i', RecursiveRegexIterator::GET_MATCH);
+				/*$Folder =& new Folder();
 				$directories = $Folder->tree($path, array('.svn', '.git', 'CVS', 'tests', 'templates'), 'dir');
-				sort($directories);
+				sort($directories);*/
 				$this->__paths[$path] = $directories;
 			}
 
-			foreach ($this->__paths[$path] as $directory) {
-				if ($this->__load($directory . DS . $file)) {
-					return $directory . DS;
+			foreach ($this->__paths[$path] as $p) {
+				$p = array_shift($p);
+				if (basename($p) != basename($file)) {
+					continue;
+				}
+				if ($this->__load($p)) {
+					return dirname($p) . DS;
 				}
 			}
 		}
@@ -1218,27 +1222,20 @@ class App extends Object {
  * @access private
  */
 	private function __list($path, $suffix = false, $extension = false) {
-		if (!class_exists('Folder')) {
-			require LIBS . 'folder.php';
+		
+		if (!is_dir($path)) {
+			return array();
 		}
-		$items = array();
-		$Folder =& new Folder($path);
-		$contents = $Folder->read(false, true);
 
-		if (is_array($contents)) {
-			if (!$suffix) {
-				return $contents[0];
-			} else {
-				foreach ($contents[1] as $item) {
-					if (substr($item, - strlen($suffix)) === $suffix) {
-						if ($extension) {
-							$items[] = $item;
-						} else {
-							$items[] = substr($item, 0, strlen($item) - strlen($suffix));
-						}
-					}
-				}
-			}
+		$suffix = $suffix ? $suffix : null;
+		$extension = $extension ? $extension : null;
+		$ending = $suffix . $extension;
+		$iterator = new IteratorIterator(new DirectoryIterator($path));
+		$files = new RegexIterator($iterator, '/(^[^\.].+)'. $ending .'$/i', RegexIterator::GET_MATCH);
+
+		$items = array();
+		foreach($files as $file) {
+			$items[] = $file[1];
 		}
 		return $items;
 	}
@@ -1255,7 +1252,13 @@ class App extends Object {
 		if ($this->__cache) {
 			$core = App::core('cake');
 			unset($this->__paths[rtrim($core[0], DS)]);
-			Cache::write('dir_map', array_filter($this->__paths), '_cake_core_');
+			$map = array();
+			foreach ($this->__paths as $k => $v) {
+				foreach ($v as $p) {
+					$map[$k][] = $p;
+				}
+			}
+			Cache::write('dir_map', array_filter($map), '_cake_core_');
 			Cache::write('file_map', array_filter($this->__map), '_cake_core_');
 			Cache::write('object_map', $this->__objects, '_cake_core_');
 		}

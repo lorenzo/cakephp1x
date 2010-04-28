@@ -984,16 +984,13 @@ class App extends Object {
 
 			if (!isset($this->__paths[$path])) {
 				$iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path));
-				$directories = new RegexIterator($iterator, '/^[^\.].+$/i', RecursiveRegexIterator::GET_MATCH);
-				/*$Folder =& new Folder();
-				$directories = $Folder->tree($path, array('.svn', '.git', 'CVS', 'tests', 'templates'), 'dir');
-				sort($directories);*/
+				$directories = new RegexIterator($iterator, '/^[^\.].*$/i', RecursiveRegexIterator::GET_MATCH);
 				$this->__paths[$path] = $directories;
 			}
 
 			foreach ($this->__paths[$path] as $p) {
 				$p = array_shift($p);
-				if (basename($p) != basename($file)) {
+				if (basename($p) !== basename($file) || strrpos($p, $file) === false) {
 					continue;
 				}
 				if ($this->__load($p)) {
@@ -1254,6 +1251,10 @@ class App extends Object {
 			unset($this->__paths[rtrim($core[0], DS)]);
 			$map = array();
 			foreach ($this->__paths as $k => $v) {
+				if (is_array($v)) {
+					$map[$k] = $v;
+					continue;
+				}
 				foreach ($v as $p) {
 					$map[$k][] = $p;
 				}
